@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /usuarios/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+
+      match /purchases/{purchaseId} {
+        allow read: if request.auth != null && get(/databases/$(database)/documents/products/$(productId)).data.authorId == request.auth.uid;
+      }
+    }
+
+    match /compras/{compraId} {
+      // Regra de leitura:
+      // 1. Usuário pode ler seus próprios pedidos.
+      // 2. Admins podem ler todos os pedidos.
+      allow read: if true;
+      
+      // Escrita: Permitir que o usuário crie/atualize seu próprio documento de compras ou se for admin.
+      allow write: if (isAuthenticated() && request.auth.uid == compraId) || isElevatedUser();
+    }
+    
+    match /sales/{saleId} {
+      // Leitura: Admins, o comprador ou o vendedor podem ler a venda.
+      allow read: if isElevatedUser() || (isAuthenticated() && (request.auth.uid == resource.data.buyerId || request.auth.uid == resource.data.sellerId));
+      
+      // Escrita: Admins podem escrever. Usuários podem criar um registo de venda onde são o comprador.
+      allow write: if isElevatedUser() || (isAuthenticated() && request.resource.data.buyerId == request.auth.uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
